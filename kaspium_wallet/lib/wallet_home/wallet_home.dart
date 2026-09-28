@@ -36,7 +36,6 @@ class WalletHome extends HookConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = ref.watch(themeProvider);
     final styles = ref.watch(stylesProvider);
     final l10n = l10nOf(context);
 
@@ -87,76 +86,74 @@ class WalletHome extends HookConsumerWidget {
       return null;
     }, const []);
 
-    return Column(
-      children: [
-        Expanded(
-          child: DefaultTabController(
-            length: 2,
-            child: Column(
-              mainAxisAlignment: .center,
-              mainAxisSize: .min,
-              children: [
-                const MainCard(),
-                Container(
-                  margin: const .fromSTEB(16, 2, 16, 10),
-                  child: TabBar(
-                    indicatorWeight: 3,
-                    indicatorColor: theme.primary60,
-                    indicatorPadding: const .symmetric(horizontal: 20),
-                    tabs: [
-                      Tab(
-                        child: GestureDetector(
-                          onLongPress: () => showTxFilterDialog(context, ref),
-                          child: Container(
-                            margin: const .only(top: 20),
-                            child: Text(
-                              l10n.transactionsUppercase,
-                              textAlign: .center,
-                              style: styles.textStyleTabLabel,
-                            ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final backgroundColor = isDark ? Colors.black : Colors.white;
+
+    return ColoredBox(
+      color: backgroundColor,
+      child: Column(
+        children: [
+          Expanded(
+            child: DefaultTabController(
+              length: 2,
+              child: Column(
+                children: [
+                  const MainCard(),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 18),
+                    height: 52,
+                    child: TabBar(
+                      indicatorWeight: 3,
+                      indicatorColor: const Color(0xff18d8d0),
+                      indicatorPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
+                      labelColor: const Color(0xfff3f6ff),
+                      unselectedLabelColor: const Color(0xff9aa8c7),
+                      labelStyle: styles.textStyleTabLabel.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      unselectedLabelStyle: styles.textStyleTabLabel.copyWith(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      tabs: [
+                        Tab(
+                          child: GestureDetector(
+                            onLongPress: () => showTxFilterDialog(context, ref),
+                            child: Text(l10n.transactionsUppercase),
                           ),
                         ),
-                      ),
-                      Tab(
-                        child: Container(
-                          padding: const .only(top: 20),
-                          width: .infinity,
-                          child: Text(
-                            l10n.utxosUppercase,
-                            textAlign: .center,
-                            style: styles.textStyleTabLabel,
-                          ),
+                        Tab(child: Text(l10n.utxosUppercase)),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      children: [
+                        Stack(
+                          children: [
+                            const TransactionsWidget(),
+                            const TopGradientWidget(),
+                          ],
                         ),
-                      ),
-                    ],
+                        Stack(
+                          children: [
+                            const UtxosWidget(),
+                            const TopGradientWidget(),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      Stack(
-                        children: [
-                          const TransactionsWidget(),
-                          const TopGradientWidget(),
-                          const BottomGradientWidget(),
-                        ],
-                      ),
-                      Stack(
-                        children: [
-                          const UtxosWidget(),
-                          const TopGradientWidget(),
-                          const BottomGradientWidget(),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-        const WalletActionButtons(),
-      ],
+          const WalletActionButtons(),
+        ],
+      ),
     );
   }
 }

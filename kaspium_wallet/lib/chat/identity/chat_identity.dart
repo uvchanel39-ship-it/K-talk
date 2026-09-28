@@ -1,8 +1,8 @@
 import '../../fee/fee_providers.dart';
 import '../../kaspa/kaspa.dart';
 
-class KMailWalletAdapter {
-  const KMailWalletAdapter({
+class KTalkWalletAdapter {
+  const KTalkWalletAdapter({
     required this.address,
     required this.network,
     this.publicKeyHex,
@@ -36,7 +36,7 @@ class KMailWalletAdapter {
     String? note,
   }) async {
     if (walletService == null || rpcService == null) {
-      throw StateError('Wallet backend is not configured for KMailWalletAdapter');
+      throw StateError('Wallet backend is not configured for KTalkWalletAdapter');
     }
 
     final sender = Address.decodeAddress(address, addressPrefix);
@@ -54,7 +54,7 @@ class KMailWalletAdapter {
       feeRate: feeRate,
       changeAddress: sender,
       payload: payload,
-      note: note ?? 'kmail-chat',
+      note: note ?? 'ktalk-chat',
     );
 
     return walletService!.sendTransaction(sendTx.tx);
@@ -67,7 +67,7 @@ class KMailWalletAdapter {
         'createdAt': (createdAt ?? DateTime.now()).toUtc().toIso8601String(),
       };
 
-  factory KMailWalletAdapter.fromJson(Map<String, dynamic> json) => KMailWalletAdapter(
+  factory KTalkWalletAdapter.fromJson(Map<String, dynamic> json) => KTalkWalletAdapter(
         address: json['address'] as String? ?? json['kaspaAddress'] as String? ?? '',
         network: json['network'] as String? ?? 'kaspa-mainnet',
         publicKeyHex: json['publicKeyHex'] as String?,
@@ -90,7 +90,7 @@ class ChatIdentity {
 
   bool get hasPublicKey => publicKeyHex != null && publicKeyHex!.trim().isNotEmpty;
 
-  factory ChatIdentity.fromWalletAdapter(KMailWalletAdapter adapter) => ChatIdentity(
+  factory ChatIdentity.fromWalletAdapter(KTalkWalletAdapter adapter) => ChatIdentity(
         kaspaAddress: adapter.address,
         network: adapter.network,
         publicKeyHex: adapter.publicKeyHex,

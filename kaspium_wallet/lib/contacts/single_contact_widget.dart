@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app_providers.dart';
 import '../l10n/l10n.dart';
+import '../kns/kns_contact_avatar.dart';
 import '../util/ui_util.dart';
 import '../widgets/address_widgets.dart';
 import '../widgets/app_icon_button.dart';
@@ -53,6 +54,12 @@ class SingleContactWidget extends ConsumerWidget {
             child: Row(
               mainAxisAlignment: .spaceBetween,
               children: [
+                KnsContactAvatar(
+                  address: contact.address,
+                  size: 44,
+                  fallbackText: contact.name,
+                ),
+                const SizedBox(width: 12),
                 Flexible(
                   child: SizedBox(
                     height: 80,

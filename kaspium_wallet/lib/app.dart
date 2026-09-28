@@ -22,6 +22,19 @@ class App extends HookConsumerWidget {
     final theme = ref.watch(themeProvider);
     final language = ref.watch(languageProvider);
     final styles = ref.watch(stylesProvider);
+    final isDark = theme.brightness == Brightness.dark;
+    final colorScheme = ThemeData().colorScheme.copyWith(
+      brightness: theme.brightness,
+      secondary: theme.primary10,
+      surface: isDark ? Colors.black : theme.backgroundDark,
+      surfaceContainerLowest: isDark ? Colors.black : null,
+      surfaceContainerLow: isDark ? Colors.black : null,
+      surfaceContainer: isDark ? Colors.black : null,
+      surfaceContainerHigh: isDark ? Colors.black : null,
+      surfaceContainerHighest: isDark ? Colors.black : null,
+      onSurface: isDark ? Colors.white : null,
+      onSurfaceVariant: isDark ? Colors.white70 : null,
+    );
 
     // Setup hight refresh rate on Android devices
     useEffect(() {
@@ -77,6 +90,11 @@ class App extends HookConsumerWidget {
                     primaryColor: theme.primary,
                     fontFamily: kDefaultFontFamily,
                     brightness: theme.brightness,
+                    scaffoldBackgroundColor: isDark
+                        ? Colors.black
+                        : theme.backgroundDark,
+                    canvasColor: isDark ? Colors.black : theme.backgroundDark,
+                    cardColor: isDark ? Colors.black : theme.backgroundDark,
                     tooltipTheme: TooltipThemeData(
                       preferBelow: false,
                       margin: .symmetric(vertical: 10),
@@ -88,13 +106,16 @@ class App extends HookConsumerWidget {
                       textStyle: styles.textStyleAddressText60,
                     ),
                     dialogTheme: DialogThemeData(
-                      backgroundColor: theme.backgroundDark,
+                      backgroundColor: isDark
+                          ? Colors.black
+                          : theme.backgroundDark,
                     ),
-                    colorScheme: ThemeData().colorScheme.copyWith(
-                      brightness: theme.brightness,
-                      secondary: theme.primary10,
-                      surface: theme.backgroundDark,
+                    bottomSheetTheme: BottomSheetThemeData(
+                      backgroundColor: isDark
+                          ? Colors.black
+                          : theme.backgroundDark,
                     ),
+                    colorScheme: colorScheme,
                   ),
                   localizationsDelegates:
                       AppLocalizations.localizationsDelegates,

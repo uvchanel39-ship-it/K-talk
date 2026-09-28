@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../database/boxes.dart';
+import '../kns/kns_profile.dart';
 import '../util/sharedprefsutil.dart';
 import 'contact.dart';
 import 'contact_labels.dart';
@@ -82,6 +83,30 @@ class ContactsNotifier extends ChangeNotifier {
   }) {
     return _addressMap[address] ??
         (includeLabels ? labeledAddresses[address] : null);
+  }
+
+  Future<void> updateKnsProfile(String address, KnsProfile profile) async {
+    final entry = _addressMap.entries
+        .cast<MapEntry<String, Contact>?>()
+        .firstWhere(
+          (entry) => entry!.key.toLowerCase() == address.toLowerCase(),
+          orElse: () => null,
+        );
+    if (entry == null) return;
+
+    final current = entry.value;
+    final updated = current.copyWith(
+      knsName: profile.domain,
+      knsAssetId: profile.assetId,
+      avatarUrl: profile.avatarUrl,
+      profileFetchedAtMs: profile.fetchedAtMs,
+    );
+    if (updated == current) return;
+
+    _nameMap[current.name] = updated;
+    _addressMap[entry.key] = updated;
+    await _contactsBox.set(current.name, updated);
+    notifyListeners();
   }
 
   Contact? getLabelForAddress(String address) => labeledAddresses[address];

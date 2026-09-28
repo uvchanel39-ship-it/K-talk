@@ -8,6 +8,10 @@ sealed class Contact with _$Contact {
   const factory Contact({
     required String name,
     required String address,
+    String? knsName,
+    String? knsAssetId,
+    String? avatarUrl,
+    int? profileFetchedAtMs,
   }) = _Contact;
 
   factory Contact.fromJson(Map<String, dynamic> json) =>

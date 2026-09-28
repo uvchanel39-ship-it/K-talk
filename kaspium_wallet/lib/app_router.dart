@@ -49,22 +49,24 @@ class AppRouter {
   void switchWallet(BuildContext context, String walletId) =>
       _replaceWith(_AppScreens.switchWallet, context, arguments: walletId);
 
-  void openChatHome(BuildContext context) =>
-      _push(_AppScreens.chatHome, context);
+  void openChatHome(BuildContext context, {int initialIndex = 0}) => _push(
+    _AppScreens.chatHome,
+    context,
+    arguments: initialIndex,
+  );
 
   void openChatConversation(
     BuildContext context,
     String recipientAddress, {
     String? recipientPublicKeyHex,
-  }) =>
-      _push(
-        _AppScreens.chatConversation,
-        context,
-        arguments: {
-          'recipientAddress': recipientAddress,
-          'recipientPublicKeyHex': recipientPublicKeyHex,
-        },
-      );
+  }) => _push(
+    _AppScreens.chatConversation,
+    context,
+    arguments: {
+      'recipientAddress': recipientAddress,
+      'recipientPublicKeyHex': recipientPublicKeyHex,
+    },
+  );
 
   bool isTopRoute<T>(BuildContext context) {
     bool isTopRoute = false;
@@ -117,7 +119,7 @@ class AppRouter {
     );
   }
 
-  String initialRoute = _AppScreens.chatHome;
+  String initialRoute = _AppScreens.splash;
 
   RouteFactory onGenerateRoute = (RouteSettings settings) {
     switch (settings.name) {
@@ -165,11 +167,17 @@ class AppRouter {
         );
       case _AppScreens.chatHome:
         return NoTransitionRoute(
-          builder: (_) => const ChatHomeScreen(),
+          builder: (_) => ChatHomeScreen(
+            initialIndex: settings.arguments is int
+                ? settings.arguments as int
+                : 0,
+          ),
           settings: settings,
         );
       case _AppScreens.chatConversation:
-        final args = settings.arguments is Map ? settings.arguments as Map : const {};
+        final args = settings.arguments is Map
+            ? settings.arguments as Map
+            : const {};
         final recipientAddress = args['recipientAddress'] as String? ?? '';
         final recipientPublicKeyHex = args['recipientPublicKeyHex'] as String?;
         return NoTransitionRoute(

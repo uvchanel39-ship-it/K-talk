@@ -10,7 +10,7 @@ import 'tx_monitor.dart';
 import 'tx_sync/address_tx_sync_store.dart';
 import 'tx_sync/tx_sync_types.dart';
 
-final _virtualChainChangedProvider = StreamProvider.autoDispose((ref) {
+final virtualChainChangedProvider = StreamProvider.autoDispose((ref) {
   final rpc = ref.watch(kaspaRpcProvider);
 
   ref.onDispose(() async {
@@ -160,7 +160,7 @@ final txMonitorForWalletProvider = Provider.autoDispose
         onOutpointsExpired: notifier.fetchNewTxsForAddresses,
       );
 
-      ref.listen(_virtualChainChangedProvider, (_, next) {
+      ref.listen(virtualChainChangedProvider, (_, next) {
         if (next.asData?.value case final message?) {
           monitor.onVirtualChainChanged(message);
         }

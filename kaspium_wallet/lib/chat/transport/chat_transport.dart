@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:convert/convert.dart';
@@ -10,6 +11,8 @@ import '../models/chat_message.dart';
 import '../protocol/message_protocol.dart';
 import '../repository/chat_repository.dart';
 import '../services/chat_handshake_service.dart';
+import '../media/image_message.dart';
+import '../media/voice_message.dart';
 
 class ChatTransport {
   const ChatTransport({
@@ -37,12 +40,14 @@ class ChatTransport {
     ChatRepository? chatRepository,
   }) async {
     final repo = chatRepository ?? repository;
-    final txs = transactions ?? await apiService.getTxsForAddress(
-      address,
-      pageSize: limit,
-      maxPages: 1,
-      shouldLoadMore: (_) => false,
-    );
+    final txs =
+        transactions ??
+        await apiService.getTxsForAddress(
+          address,
+          pageSize: limit,
+          maxPages: 1,
+          shouldLoadMore: (_) => false,
+        );
 
     final messages = <ChatMessage>[];
     for (final tx in txs) {
@@ -71,6 +76,7 @@ class ChatTransport {
         parsed: parsed,
         privateKeyHex: privateKeyHex,
         privateKeyResolver: privateKeyResolver,
+        repository: repo,
       );
 
       if (message == null) {
@@ -97,38 +103,56 @@ class ChatTransport {
     ChatRepository? chatRepository,
     String? note,
   }) async {
-    final resolvedSenderAddress = sender?.kaspaAddress ??
+    final resolvedSenderAddress =
+        sender?.kaspaAddress ??
         senderAddress ??
         senderIdentity?.kaspaAddress ??
         walletAddress;
     final resolvedRecipientAddress = switch (recipient) {
       ChatIdentity() => recipient.kaspaAddress,
-      KMailWalletAdapter() => recipient.address,
+      KTalkWalletAdapter() => recipient.address,
       _ => recipient.toString(),
     };
-    final resolvedRecipientIdentity = recipientIdentity ??
+    final resolvedRecipientIdentity =
+        recipientIdentity ??
         (recipient is ChatIdentity ? recipient : null) ??
-        (recipient is KMailWalletAdapter ? ChatIdentity.fromWalletAdapter(recipient) : null);
+        (recipient is KTalkWalletAdapter
+            ? ChatIdentity.fromWalletAdapter(recipient)
+            : null);
 
-    final sanitizedSenderAddress = _validateAddress(resolvedSenderAddress, 'sender');
-    final sanitizedRecipientAddress = _validateAddress(resolvedRecipientAddress, 'recipient');
+    final sanitizedSenderAddress = _validateAddress(
+      resolvedSenderAddress,
+      'sender',
+    );
+    final sanitizedRecipientAddress = _validateAddress(
+      resolvedRecipientAddress,
+      'recipient',
+    );
 
-    final resolvedRecipientPublicKey = (recipientPublicKeyHex ?? resolvedRecipientIdentity?.publicKeyHex)
-        ?.trim();
-    if (resolvedRecipientPublicKey == null || resolvedRecipientPublicKey.isEmpty) {
-      throw StateError('Recipient public key is required before sending a K-Mail message');
+    final resolvedRecipientPublicKey =
+        (recipientPublicKeyHex ??
+                resolvedRecipientIdentity?.publicKeyHex ??
+                _publicKeyFromAddress(sanitizedRecipientAddress))
+            .trim();
+    if (resolvedRecipientPublicKey.isEmpty) {
+      throw StateError(
+        'Recipient public key is required before sending a K-Talk message',
+      );
     }
 
-    final encrypted = KasiaCipher.encrypt(plaintext, resolvedRecipientPublicKey);
+    final encrypted = KasiaCipher.encrypt(
+      plaintext,
+      resolvedRecipientPublicKey,
+    );
     final wirePayload = MessageProtocol.serializeCommPayload(
-      alias: alias ?? 'kmail',
+      alias: alias ?? 'ktalk',
       encrypted: encrypted,
     );
 
     final txId = await send(
       toAddress: sanitizedRecipientAddress,
       payload: wirePayload,
-      note: note ?? 'kmail-chat',
+      note: note ?? 'ktalk-chat',
     );
 
     final message = ChatMessage(
@@ -141,7 +165,7 @@ class ChatTransport {
       transactionId: txId,
       status: ChatMessageStatus.sent,
       metadata: {
-        'alias': alias ?? 'kmail',
+        'alias': alias ?? 'ktalk',
         'encryptedFromPublicKey': resolvedRecipientPublicKey,
       },
     );
@@ -178,27 +202,116 @@ class ChatTransport {
     );
   }
 
+  Future<ChatMessage?> ensureHandshake({
+    required ChatIdentity recipient,
+    required ChatRepository chatRepository,
+    String alias = 'ktalk',
+  }) async {
+    final existing = chatRepository.getHandshakeState().where((state) {
+      return state['recipientAddress'] == recipient.kaspaAddress ||
+          state['senderAddress'] == recipient.kaspaAddress;
+    });
+    if (existing.any((state) => state['status'] == 'active')) {
+      return null;
+    }
+
+    final pending = existing.any((state) => state['status'] == 'pending');
+    final handshake = ChatHandshakeService().createHandshake(
+      senderAddress: chatRepository.currentIdentity.kaspaAddress,
+      recipientAddress: recipient.kaspaAddress,
+      recipientPublicKeyHex: recipient.publicKeyHex ??
+          _publicKeyFromAddress(recipient.kaspaAddress),
+      alias: alias,
+        isResponse: pending,
+    );
+    final txId = await send(
+      toAddress: recipient.kaspaAddress,
+      payload: handshake.payload,
+      amount: Amount.raw(BigInt.from(20000000)),
+      note: 'ktalk-handshake',
+    );
+    await chatRepository.saveHandshakeState({
+      'sessionId': txId,
+      'transactionId': txId,
+      'senderAddress': chatRepository.currentIdentity.kaspaAddress,
+      'recipientAddress': recipient.kaspaAddress,
+      'status': 'active',
+      'isResponse': pending,
+      'sentAtMs': DateTime.now().millisecondsSinceEpoch,
+    });
+    await chatRepository.saveContact({
+      'address': recipient.kaspaAddress,
+      'publicKeyHex': recipient.publicKeyHex,
+      'handshakeComplete': true,
+      'conversationStatus': 'active',
+    });
+    return ChatMessage(
+      id: txId,
+      sender: chatRepository.currentIdentity.kaspaAddress,
+      receiver: recipient.kaspaAddress,
+      timestampMs: DateTime.now().millisecondsSinceEpoch,
+      messageType: ChatMessageType.handshake,
+      encryptedPayload: hex.encode(handshake.payload),
+      transactionId: txId,
+      status: ChatMessageStatus.sent,
+      plaintext: '[Request to communicate]',
+    );
+  }
+
+  Future<ChatMessage> sendImageMessage({
+    required Object recipient,
+    required Uint8List bytes,
+    required String fileName,
+    String mimeType = 'image/jpeg',
+    String? recipientPublicKeyHex,
+    ChatRepository? chatRepository,
+  }) => sendMessage(
+    recipient,
+    ImageMessage.encode(fileName: fileName, bytes: bytes, mimeType: mimeType),
+    recipientPublicKeyHex: recipientPublicKeyHex,
+    chatRepository: chatRepository,
+  );
+
+  Future<ChatMessage> sendVoiceMessage({
+    required Object recipient,
+    required Uint8List bytes,
+    required String fileName,
+    String mimeType = 'audio/webm',
+    String? recipientPublicKeyHex,
+    ChatRepository? chatRepository,
+  }) => sendMessage(
+    recipient,
+    VoiceMessage.encode(fileName: fileName, bytes: bytes, mimeType: mimeType),
+    recipientPublicKeyHex: recipientPublicKeyHex,
+    chatRepository: chatRepository,
+  );
+
   Future<String> send({
     required String toAddress,
     required Uint8List payload,
+    Amount? amount,
     String? note,
   }) async {
     final sender = Address.decodeAddress(walletAddress);
     final recipient = Address.decodeAddress(toAddress);
-    final spendableUtxos = (await walletService.rpc.getUtxosByAddresses([walletAddress])).toList();
+    final spendableUtxos = (await walletService.rpc.getUtxosByAddresses([
+      walletAddress,
+    ])).toList();
 
     if (spendableUtxos.isEmpty) {
-      throw StateError('No spendable UTXOs available for chat payload transport');
+      throw StateError(
+        'No spendable UTXOs available for chat payload transport',
+      );
     }
 
     final sendTx = walletService.createSendTx(
       toAddress: recipient,
-      amount: Amount.zero,
+      amount: amount ?? Amount.zero,
       spendableUtxos: spendableUtxos,
       feeRate: feeRate,
       changeAddress: sender,
       payload: payload,
-      note: note ?? 'kmail-chat',
+      note: note ?? 'ktalk-chat',
     );
 
     return walletService.sendTransaction(sendTx.tx);
@@ -209,12 +322,14 @@ class ChatTransport {
     int limit = 50,
     List<Transaction>? transactions,
   }) async {
-    final txs = transactions ?? await apiService.getTxsForAddress(
-      address,
-      pageSize: limit,
-      maxPages: 1,
-      shouldLoadMore: (_) => false,
-    );
+    final txs =
+        transactions ??
+        await apiService.getTxsForAddress(
+          address,
+          pageSize: limit,
+          maxPages: 1,
+          shouldLoadMore: (_) => false,
+        );
 
     final payloads = <Uint8List>[];
 
@@ -231,7 +346,7 @@ class ChatTransport {
   static String _validateAddress(String value, String role) {
     final normalized = value.trim();
     if (normalized.isEmpty) {
-      throw StateError('Missing $role address for K-Mail transport');
+      throw StateError('Missing $role address for K-Talk transport');
     }
 
     try {
@@ -240,6 +355,11 @@ class ChatTransport {
     } on Exception {
       throw FormatException('Invalid $role address: $normalized');
     }
+  }
+
+  static String _publicKeyFromAddress(String address) {
+    final parsed = Address.decodeAddress(address);
+    return hex.encode(parsed.scriptAddress());
   }
 
   static Uint8List? _extractPayload(String rawPayload) {
@@ -262,6 +382,7 @@ class ChatTransport {
     required ParsedMessagePayload parsed,
     String? privateKeyHex,
     Future<String> Function(String address)? privateKeyResolver,
+    ChatRepository? repository,
   }) async {
     var resolvedPrivateKey = privateKeyHex;
     if (resolvedPrivateKey == null && privateKeyResolver != null) {
@@ -269,7 +390,9 @@ class ChatTransport {
     }
 
     if (resolvedPrivateKey == null || resolvedPrivateKey.trim().isEmpty) {
-      throw StateError('Missing wallet private key to decrypt incoming K-Mail message');
+      throw StateError(
+        'Missing wallet private key to decrypt incoming K-Talk message',
+      );
     }
 
     final comm = parsed.type == MessageProtocol.commType
@@ -278,10 +401,12 @@ class ChatTransport {
 
     if (comm != null) {
       final plaintext = KasiaCipher.decrypt(comm.message, resolvedPrivateKey);
-      final msgId = tx.transactionId.isEmpty ? 'kmail-${DateTime.now().millisecondsSinceEpoch}' : tx.transactionId;
+      final msgId = tx.transactionId.isEmpty
+          ? 'ktalk-${DateTime.now().millisecondsSinceEpoch}'
+          : tx.transactionId;
       final message = ChatMessage(
         id: msgId,
-        sender: comm.alias,
+        sender: _senderFromTransaction(tx) ?? comm.alias,
         receiver: address,
         timestampMs: tx.blockTime * 1000,
         messageType: ChatMessageType.text,
@@ -292,7 +417,7 @@ class ChatTransport {
           'senderAlias': comm.alias,
           'plaintext': plaintext,
           'blockTime': tx.blockTime,
-          'isKMail': true,
+          'isKTalk': true,
         },
         plaintext: plaintext,
       );
@@ -301,14 +426,38 @@ class ChatTransport {
 
     final handshake = MessageProtocol.parseHandshakePayload(payload);
     if (handshake != null) {
+      final decrypted = KasiaCipher.decrypt(handshake, resolvedPrivateKey);
+      final handshakeData = _parseHandshakeJson(decrypted);
+      final sender = _senderFromTransaction(tx) ??
+          (handshakeData?['senderAddress'] as String?) ??
+          'unknown';
       final handshakePayload = ChatHandshakeService().parseHandshake(
-        senderAddress: 'unknown',
+        senderAddress: sender,
         recipientAddress: address,
         payload: payload,
       );
-      final decrypted = KasiaCipher.decrypt(handshake, resolvedPrivateKey);
+      if (repository != null && handshakeData != null) {
+        final isResponse = handshakeData['isResponse'] == true;
+        await repository.saveHandshakeState({
+          'sessionId': tx.transactionId,
+          'senderAddress': sender,
+          'recipientAddress': address,
+          ...handshakeData,
+          'status': isResponse ? 'active' : 'pending',
+          'transactionId': tx.transactionId,
+          'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
+        });
+        await repository.saveContact({
+          'address': sender,
+          'publicKeyHex': _publicKeyFromAddress(sender),
+          'handshakeComplete': isResponse,
+          'conversationStatus': isResponse ? 'active' : 'pending',
+        });
+      }
       return ChatMessage(
-        id: tx.transactionId.isEmpty ? 'handshake-${DateTime.now().millisecondsSinceEpoch}' : tx.transactionId,
+        id: tx.transactionId.isEmpty
+            ? 'handshake-${DateTime.now().millisecondsSinceEpoch}'
+            : tx.transactionId,
         sender: handshakePayload.senderAddress,
         receiver: handshakePayload.recipientAddress,
         timestampMs: tx.blockTime * 1000,
@@ -318,6 +467,7 @@ class ChatTransport {
         status: ChatMessageStatus.received,
         metadata: {
           'plaintext': decrypted,
+          ...?handshakeData,
           'blockTime': tx.blockTime,
           'isHandshake': true,
         },
@@ -326,5 +476,23 @@ class ChatTransport {
     }
 
     return null;
+  }
+
+  static String? _senderFromTransaction(Transaction tx) {
+    for (final input in tx.inputs) {
+      final address = input.previousOutpointAddress?.trim();
+      if (address != null && address.isNotEmpty) return address;
+    }
+    return null;
+  }
+
+  static Map<String, dynamic>? _parseHandshakeJson(String plaintext) {
+    try {
+      final decoded = jsonDecode(plaintext);
+      if (decoded is! Map || decoded['type'] != 'handshake') return null;
+      return Map<String, dynamic>.from(decoded);
+    } on FormatException {
+      return null;
+    }
   }
 }

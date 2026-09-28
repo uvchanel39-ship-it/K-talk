@@ -12,6 +12,7 @@ import '../main_card/main_card.dart';
 import '../settings_drawer/settings_drawer.dart';
 import '../util/routes.dart';
 import '../wallet_home/wallet_home.dart';
+import '../widgets/k_talk_bottom_navigation.dart';
 import '../widgets/network_banner.dart';
 import 'lock_screen.dart';
 import 'password_lock_screen.dart';
@@ -97,27 +98,45 @@ class HomeScreen extends HookConsumerWidget {
 
     final width = MediaQuery.widthOf(context);
     final drawerWidth = (width < 375) ? width * 0.94 : width * 0.85;
+    final isDark = theme.brightness == Brightness.dark;
+    final backgroundColor = isDark ? Colors.black : Colors.white;
+    final navigationController = useMemoized(
+      KTalkBottomNavigationController.new,
+    );
+    useEffect(() => navigationController.dispose, [navigationController]);
 
-    return Scaffold(
-      key: scaffoldKey,
-      drawerEdgeDragWidth: 60,
-      resizeToAvoidBottomInset: false,
-      backgroundColor: theme.background,
-      drawerScrimColor: theme.barrierWeaker,
-      drawer: SizedBox(
-        width: drawerWidth,
-        child: const Drawer(child: SettingsSheet()),
-      ),
-      extendBody: true,
-      body: SafeArea(
-        maintainBottomViewPadding: true,
-        child: ClipRect(
-          child: NetworkBanner(
-            child: Padding(
-              padding: const .only(top: 4),
-              child: const WalletHome(),
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => navigationController.showAndReset(),
+      child: Scaffold(
+        key: scaffoldKey,
+        drawerEdgeDragWidth: 60,
+        resizeToAvoidBottomInset: false,
+        backgroundColor: backgroundColor,
+        drawerScrimColor: theme.barrierWeaker,
+        drawer: SizedBox(
+          width: drawerWidth,
+          child: const Drawer(child: SettingsSheet()),
+        ),
+        extendBody: false,
+        body: SafeArea(
+          maintainBottomViewPadding: true,
+          child: ClipRect(
+            child: NetworkBanner(
+              child: Padding(
+                padding: const .only(top: 4),
+                child: const WalletHome(),
+              ),
             ),
           ),
+        ),
+        bottomNavigationBar: KTalkBottomNavigation(
+          controller: navigationController,
+          currentIndex: 2,
+          onTap: (index) {
+            if (index == 2) return;
+            appRouter.openChatHome(context, initialIndex: index);
+          },
         ),
       ),
     );

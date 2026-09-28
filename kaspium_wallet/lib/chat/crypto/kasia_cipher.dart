@@ -114,12 +114,26 @@ class KasiaCipher {
 
     return EncryptedMessage(
       nonce: nonce,
-      ephemeralPublicKey: _toFixedLengthBytes(
-        ephemeralPoint.x!.toBigInteger()!,
-        32,
-      ),
+      ephemeralPublicKey: _compressedPublicKeyBytes(ephemeralPoint),
       ciphertext: output.sublist(0, len),
     );
+  }
+
+  static String deriveDeterministicAlias({
+    required String privateKeyHex,
+    required String peerPublicKeyHex,
+    required String contextPublicKeyHex,
+  }) {
+    final privateKey = _validatePrivateKeyHex(privateKeyHex);
+    final peerPoint = _decodePublicKey(peerPublicKeyHex);
+    final sharedSecret = _ecdhSharedX(privateKey, peerPoint);
+    final context = _publicKeyXBytes(contextPublicKeyHex);
+    final info = Uint8List.fromList([
+      ...utf8.encode('chat'),
+      ...sharedSecret,
+      ...context,
+    ]);
+    return hex.encode(hkdfSha256(sharedSecret, Uint8List(0), info, 6));
   }
 
   static String decrypt(EncryptedMessage encryptedMessage, String privateKeyHex) {
@@ -183,6 +197,16 @@ class KasiaCipher {
       final y = _liftX(x);
       return _secp256k1.curve.createPoint(x, y);
     }
+    if (normalized.length == 66 &&
+        (normalized.startsWith('02') || normalized.startsWith('03'))) {
+      final x = BigInt.parse(normalized.substring(2), radix: 16);
+      final y = _liftX(x);
+      final point = _secp256k1.curve.createPoint(x, y);
+      if ((normalized.startsWith('03')) != !y.isEven) {
+        return _secp256k1.curve.createPoint(x, _secp256k1Prime - y);
+      }
+      return point;
+    }
     if (normalized.length == 130 && normalized.startsWith('04')) {
       final x = BigInt.parse(normalized.substring(2, 66), radix: 16);
       final y = BigInt.parse(normalized.substring(66), radix: 16);
@@ -207,6 +231,28 @@ class KasiaCipher {
       throw StateError('Unable to derive shared secret');
     }
     return _toFixedLengthBytes(shared.x!.toBigInteger()!, 32);
+  }
+
+  static Uint8List _publicKeyXBytes(String publicKeyHex) {
+    final normalized = publicKeyHex.replaceAll(RegExp(r'[^0-9a-fA-F]'), '');
+    if (normalized.length == 64) {
+      return Uint8List.fromList(hex.decode(normalized));
+    }
+    if (normalized.length == 66 &&
+        (normalized.startsWith('02') || normalized.startsWith('03'))) {
+      return Uint8List.fromList(hex.decode(normalized.substring(2)));
+    }
+    if (normalized.length == 130 && normalized.startsWith('04')) {
+      return Uint8List.fromList(hex.decode(normalized.substring(2, 66)));
+    }
+    throw FormatException('Unsupported public key format: $publicKeyHex');
+  }
+
+  static Uint8List _compressedPublicKeyBytes(ECPoint point) {
+    final x = point.x!.toBigInteger()!;
+    final y = point.y!.toBigInteger()!;
+    final prefix = y.isEven ? 0x02 : 0x03;
+    return Uint8List.fromList([prefix, ..._toFixedLengthBytes(x, 32)]);
   }
 
   static Uint8List _toFixedLengthBytes(BigInt value, int length) {

@@ -60,10 +60,10 @@ class ChatStorage {
   }
 
   static Future<ChatStorage> _openInternal() async {
-    const conversationBoxKey = '_kmail_conversations';
-    const messageBoxKey = '_kmail_messages';
-    const contactBoxKey = '_kmail_contacts';
-    const handshakeBoxKey = '_kmail_handshakes';
+    const conversationBoxKey = '_ktalk_conversations';
+    const messageBoxKey = '_ktalk_messages';
+    const contactBoxKey = '_ktalk_contacts';
+    const handshakeBoxKey = '_ktalk_handshakes';
 
     final boxKeys = [
       conversationBoxKey,
@@ -137,6 +137,19 @@ class ChatStorage {
 
     await _messages.setList(key, updated, convert: (item) => item);
 
+    final transactionId = message.transactionId?.trim();
+    if (transactionId != null && transactionId.isNotEmpty) {
+      final transactionIds = _messages.box.get('_transaction_ids');
+      final indexed = transactionIds is List
+          ? transactionIds.whereType<String>().toSet()
+          : <String>{};
+      indexed.add(transactionId);
+      await _messages.setList(
+        '_transaction_ids',
+        indexed.toList(growable: false),
+      );
+    }
+
     final conversations = _readMapList(_conversations, 'all');
     final conversationId = '${message.sender}::${message.receiver}';
     final normalized = <Map<String, dynamic>>[];
@@ -183,7 +196,12 @@ class ChatStorage {
   }
 
   bool hasTransactionId(String transactionId) {
-    final keys = _messages.box.keys.whereType<String>();
+    final indexed = _messages.box.get('_transaction_ids');
+    if (indexed is List && indexed.contains(transactionId)) return true;
+
+    final keys = _messages.box.keys
+      .whereType<String>()
+      .where((key) => key != '_transaction_ids');
     for (final key in keys) {
       final items = _readMapList(_messages, key);
       if (items.any((item) => (item['transactionId'] as String?) == transactionId)) {

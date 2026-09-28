@@ -21,6 +21,7 @@ class MessageProtocol {
   static const String version = '1';
   static const String commType = 'comm';
   static const String handshakeType = 'handshake';
+  static const String broadcastType = 'bcast';
 
   static Uint8List serializeCommPayload({
     required String alias,
@@ -56,6 +57,17 @@ class MessageProtocol {
     final text = utf8.decode(payload, allowMalformed: true);
     return text.startsWith('$prefix:$version:$commType:') ||
         text.startsWith('$legacyPrefix:$version:$commType:');
+  }
+
+  static Uint8List serializeBroadcastPayload({
+    required String channel,
+    required String content,
+  }) {
+    final normalized = normalizeChannel(channel);
+    if (!isValidChannel(normalized)) {
+      throw FormatException('Invalid broadcast channel: $channel');
+    }
+    return Uint8List.fromList(utf8.encode('$prefix:$version:$broadcastType:$normalized:$content'));
   }
 
   static ParsedMessagePayload? parse(Uint8List payload) {
@@ -114,5 +126,25 @@ class MessageProtocol {
     }
   }
 
+  static ({String channel, String content})? parseBroadcastPayload(Uint8List payload) {
+    final text = utf8.decode(payload, allowMalformed: true);
+    final parts = text.split(':');
+    if (parts.length < 5 ||
+        (parts[0] != prefix && parts[0] != legacyPrefix) ||
+        parts[1] != version ||
+        parts[2] != broadcastType) {
+      return null;
+    }
+    final channel = parts[3];
+    if (!isValidChannel(channel)) return null;
+    return (channel: channel, content: parts.sublist(4).join(':'));
+  }
+
   static String normalizeAlias(String alias) => alias.replaceAll(':', '_').trim();
+
+  static String normalizeChannel(String channel) => channel.trim().toLowerCase();
+
+  static bool isValidChannel(String channel) =>
+      channel.isNotEmpty && channel.length <= 36 && !channel.contains(':') &&
+      !channel.contains(RegExp(r'\s'));
 }

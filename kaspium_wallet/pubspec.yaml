@@ -61,6 +61,8 @@ dependencies:
     git: 
       url: https://github.com/azbuky/kaspium_push.git
       ref: 4.0.0
+  image: ^4.5.4
+  record: ^6.1.2
 
 dev_dependencies:
   flutter_test:

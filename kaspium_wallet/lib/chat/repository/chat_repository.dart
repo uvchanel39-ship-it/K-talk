@@ -9,7 +9,7 @@ class ChatRepository {
   });
 
   final ChatStorage storage;
-  final KMailWalletAdapter walletAdapter;
+  final KTalkWalletAdapter walletAdapter;
 
   Future<void> saveConversation(Map<String, dynamic> conversation) =>
       storage.saveConversation(conversation);

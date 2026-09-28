@@ -124,18 +124,18 @@ class _TestRpc extends RpcService {
 
 void main() {
   setUp(() async {
-    Hive.init('/tmp/hive_kmail_test');
+    Hive.init('/tmp/hive_ktalk_test');
     await Hive.close();
     await Hive.deleteFromDisk();
   });
 
-  group('KMail chat foundation', () {
-    test('App starts at the KMail Chat Home route', () {
-      expect(appRouter.initialRoute, equals('/chat_home'));
+  group('KTalk chat foundation', () {
+    test('App starts at the KTalk splash route', () {
+      expect(appRouter.initialRoute, equals('/'));
     });
 
     test('ChatIdentity is derived from wallet address and network', () {
-      final adapter = KMailWalletAdapter(
+      final adapter = KTalkWalletAdapter(
         address: 'kaspa:qqqtestaddress',
         network: 'kaspa-mainnet',
         publicKeyHex: '01' * 32,
@@ -185,10 +185,10 @@ void main() {
     test('KasiaCipher encrypt and decrypt round-trip the message', () {
       final privateKey = KasiaCipher.generatePrivateKeyHex();
       final publicKey = KasiaCipher.derivePublicKeyHex(privateKey);
-      final encrypted = KasiaCipher.encrypt('hello from kmail', publicKey);
+      final encrypted = KasiaCipher.encrypt('hello from ktalk', publicKey);
       final decrypted = KasiaCipher.decrypt(encrypted, privateKey);
 
-      expect(decrypted, 'hello from kmail');
+      expect(decrypted, 'hello from ktalk');
     });
 
     test('ChatHandshakeService creates and validates a valid handshake', () {
@@ -233,10 +233,10 @@ void main() {
       final second = await ChatStorage.open();
 
       expect(identical(first, second), isTrue);
-      expect(Hive.isBoxOpen('_kmail_conversations'), isTrue);
-      expect(Hive.isBoxOpen('_kmail_messages'), isTrue);
-      expect(Hive.isBoxOpen('_kmail_contacts'), isTrue);
-      expect(Hive.isBoxOpen('_kmail_handshakes'), isTrue);
+      expect(Hive.isBoxOpen('_ktalk_conversations'), isTrue);
+      expect(Hive.isBoxOpen('_ktalk_messages'), isTrue);
+      expect(Hive.isBoxOpen('_ktalk_contacts'), isTrue);
+      expect(Hive.isBoxOpen('_ktalk_handshakes'), isTrue);
     });
 
     test('ChatStorage persists messages and conversations without reopening boxes', () async {
@@ -285,7 +285,7 @@ void main() {
 
       final sent = await transport.sendMessage(
         recipientAddress,
-        'hello from K-Mail',
+        'hello from K-Talk',
         recipientIdentity: ChatIdentity(
           kaspaAddress: recipientAddress,
           network: 'kaspa-mainnet',
@@ -296,10 +296,10 @@ void main() {
       expect(sent.transactionId, 'fake-tx-id');
       expect(sent.status, ChatMessageStatus.sent);
       expect(sent.encryptedPayload, isNotEmpty);
-      expect(sent.encryptedPayload, isNot('hello from K-Mail'));
+      expect(sent.encryptedPayload, isNot('hello from K-Talk'));
     });
 
-    test('ChatTransport receives a valid incoming K-Mail payload and saves it once', () async {
+    test('ChatTransport receives a valid incoming K-Talk payload and saves it once', () async {
       final recipientPrivateKey = KasiaCipher.generatePrivateKeyHex();
       final recipientPublicKey = KasiaCipher.derivePublicKeyHex(recipientPrivateKey);
       final recipientAddress = Address.publicKey(
@@ -315,14 +315,14 @@ void main() {
       final txId = 'tx-${DateTime.now().microsecondsSinceEpoch}';
 
       final storage = ChatStorage.withBoxes(
-        conversations: await Hive.openBox<dynamic>('_kmail_conversations'),
-        messages: await Hive.openBox<dynamic>('_kmail_messages'),
-        contacts: await Hive.openBox<dynamic>('_kmail_contacts'),
-        handshakes: await Hive.openBox<dynamic>('_kmail_handshakes'),
+        conversations: await Hive.openBox<dynamic>('_ktalk_conversations'),
+        messages: await Hive.openBox<dynamic>('_ktalk_messages'),
+        contacts: await Hive.openBox<dynamic>('_ktalk_contacts'),
+        handshakes: await Hive.openBox<dynamic>('_ktalk_handshakes'),
       );
       final repo = ChatRepository(
         storage: storage,
-        walletAdapter: KMailWalletAdapter(
+        walletAdapter: KTalkWalletAdapter(
           address: recipientAddress,
           network: 'kaspa-mainnet',
           publicKeyHex: recipientPublicKey,

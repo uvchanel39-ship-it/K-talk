@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../chat_providers.dart';
+import '../identity/chat_identity.dart';
 import '../models/chat_message.dart';
 import '../repository/chat_repository.dart';
+import '../../kns/kns_contact_avatar.dart';
 
 class ChatConversationScreen extends ConsumerStatefulWidget {
   const ChatConversationScreen({
@@ -32,11 +34,27 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(chatSyncProvider);
+    ref.watch(chatRevisionProvider);
     final repositoryAsync = ref.watch(chatRepositoryProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.recipientAddress),
+        title: Row(
+          children: [
+            KnsContactAvatar(
+              address: widget.recipientAddress,
+              size: 36,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: KnsContactName(
+                address: widget.recipientAddress,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+            ),
+          ],
+        ),
       ),
       body: repositoryAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -155,6 +173,14 @@ class _ChatConversationScreenState extends ConsumerState<ChatConversationScreen>
 
     try {
       final transport = ref.read(chatTransportProvider);
+      await transport.ensureHandshake(
+        recipient: ChatIdentity(
+          kaspaAddress: widget.recipientAddress,
+          network: repository.currentIdentity.network,
+          publicKeyHex: widget.recipientPublicKeyHex,
+        ),
+        chatRepository: repository,
+      );
       await transport.sendTextMessage(
         recipient: widget.recipientAddress,
         plaintext: text,
